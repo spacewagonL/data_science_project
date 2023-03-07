@@ -251,6 +251,6 @@ Although we see a spike since 2020, the prediction of the yearly number of incid
 
 
 
-rmarkdown::render_site()
+
 
 
