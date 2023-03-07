@@ -1,0 +1,256 @@
+---
+title: "NYPD Project"
+author: "ZHI ZENG"
+date: "2023-03-02"
+output:github_document
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Load the libraries
+```{r}
+library(tidyverse)
+library(stringr)
+library(tidyr)
+library(cowplot)
+library(ggplot2)
+library(lubridate)
+library(dplyr)
+library(hms)
+```
+
+
+## Import and read NYPD data
+
+```{r import}
+url<-"https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+
+nypddata<-read_csv(url)
+```
+## The summary of the data
+```{r summary}
+summary(nypddata)
+```
+
+## Tidy and Clean the data
+Variables I won't discuss this time includes:   the location of the incidences, INCIDENT_KEY,JURISDICTION_CODE, of it it is murder or not.   
+Some questions I am interested in are:    
+* What is the over trend of the the number of incidents? Is it going up or down?    
+* What time of a day did the incidents mostly happen?   
+* What month of a year did the incidents mostly happen?   
+* Are women more likely to became the victims?     
+* Are young people more likely to get involved in the incidences?       
+Therefore, here are the variables that I will work with:OCCUR_DATE,OCCUR_TIME,VIC_AGE_GROUP,VIC_SEX,PERP_AGE_GROUP,PERP_SEX
+```{r clean and tidy the data}
+
+#make the date and time from strings to time object
+nypddata<-nypddata %>% 
+  select(OCCUR_DATE,OCCUR_TIME,VIC_AGE_GROUP,VIC_SEX,PERP_AGE_GROUP,PERP_SEX) %>% 
+  mutate(OCCUR_DATE=mdy(OCCUR_DATE)) %>%
+  mutate(OCCUR_TIME=format(as.hms(OCCUR_TIME),format = "H:M:S"))%>% 
+  arrange(nypddata, desc(OCCUR_DATE))
+
+```
+
+The summary of the new data set is:
+```{r summary of the new dataset}
+summary(nypddata)
+```
+The data set includes the data from 2006-01-01 to 2021-12-31. 
+There are 25596 incidences recorded during this time period.
+
+***
+## Visualizations and Analysis
+### Visualization 1
+#### Question:What is the trend of the number of incidence? Is it going up? When is the peak?
+#### Visualization:
+First, I want to group the data by the date and count how many cases occurred in each date:
+```{r}
+#create a new data frame called nypddata_by_date
+nypddata_by_date<-nypddata %>% 
+  group_by(OCCUR_DATE) %>% 
+  summarise(count = n()) %>% 
+  rename('Number_of_Incidents'='count')
+```
+Then, I'd like to plot the data:
+```{r}
+nypddata_by_date %>% 
+  ggplot(aes(x =OCCUR_DATE , y = Number_of_Incidents))+
+  geom_line (aes (color = "Number_of_Incidents"))
+
+```
+  
+  Let's see the total shootings happened per year:
+```{r}
+nypddata_by_year<-nypddata_by_date %>% 
+  mutate(Year=year(OCCUR_DATE)) %>% 
+  group_by(Year)%>% 
+  summarise(count = n()) %>% 
+  rename('Number_of_Incidents'='count')
+
+nypddata_by_year %>% 
+  ggplot(aes(x =Year , y = Number_of_Incidents))+
+  geom_point (aes (color = "Number_of_Incidents"))+
+  stat_smooth(method = "loess", color = "gray",span = 0.5)
+ 
+```
+
+#### Analysis:
+```{r}
+nypddata_by_date %>% 
+  slice_max(Number_of_Incidents,n=5)
+
+nypddata_by_year %>% 
+  slice_max(Number_of_Incidents,n=5)
+
+```
+1. There is a trend of the going down since 2006 to 2018 and went up again since then. 
+2. From 2018 to 2021, the yearly number of cases keeps going up. By the end of 2021, the yearly number of incidents is almost back to the level of 2016
+3. The daily peak happens at 2020. The maximum number of incidents by date is 47, which happens on 2020-07-05. Within the 5 max incidences days, 2 of them is in July,2020. 
+4.The average number of incidents daily is nearly 5.
+```{r}
+mean(nypddata_by_date$Number_of_Incidents)
+```
+
+### Visualization 2
+#### Question:Are women more likely to became the victims? 
+#### Visualization:
+```{r}
+#create a new data frame called nypddata_by_vic_sex
+nypddata_by_vic_sex<-nypddata %>% 
+  group_by(VIC_SEX) %>% 
+  summarise(count = n()) %>% 
+  rename('Number_of_Incidents'='count')
+
+nypddata_by_vic_sex %>% 
+  ggplot(aes(x=VIC_SEX,y=Number_of_Incidents,fill = VIC_SEX))+
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Number_of_Incidents), vjust = -0.5)+
+  labs(title="Victims Sex")
+```
+  
+  What about the sex of perpetrators?
+```{r}
+nypddata_by_perp_sex<-nypddata %>% 
+  group_by(PERP_SEX) %>% 
+  summarise(count = n()) %>% 
+  rename('Number_of_Incidents'='count')
+
+nypddata_by_perp_sex %>% 
+  ggplot(aes(x=PERP_SEX,y=Number_of_Incidents,fill = PERP_SEX))+
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Number_of_Incidents), vjust = -0.5)+
+  labs(title="Perpetrators Sex")
+```
+
+#### Analysis:
+Most of the victims and perpetrator are male. There is a significant difference between the number of males and females got involved into the shooting incidents.
+
+
+
+### Visualization 3
+#### Questions: What about the age group? Are young people more likely to get involved in the incidences? 
+#### Visualization:
+```{r}
+nypddata_by_vic_age<-nypddata %>% 
+  group_by(VIC_AGE_GROUP) %>% 
+  summarise(count = n()) %>% 
+  rename('Number_of_Incidents'='count')
+
+nypddata_by_vic_age %>% 
+  ggplot(aes(x=reorder(VIC_AGE_GROUP,-Number_of_Incidents),y=Number_of_Incidents,fill = VIC_AGE_GROUP))+
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Number_of_Incidents), vjust = -0.5)+
+  labs(x="Victims Age Group")
+
+nypddata_by_perp_age<-nypddata %>% 
+  group_by(PERP_AGE_GROUP) %>% 
+  summarise(count = n()) %>% 
+  rename('Number_of_Incidents'='count')
+
+nypddata_by_perp_age %>%  
+  filter (PERP_AGE_GROUP!="UNKNOWN") %>% 
+  ggplot(aes(x=reorder(PERP_AGE_GROUP,-Number_of_Incidents),y=Number_of_Incidents,fill = PERP_AGE_GROUP))+
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Number_of_Incidents), vjust = -0.5)+
+  labs(x="Perpetrators Age Group")
+
+
+```
+#### Analysis:
+It shows most of the victims are from the age group of 25-44.
+While most of the perpetrators are from the age group of 18-24.
+
+### Visualization 4
+#### Questions: What month of a year did the incidents mostly happen?
+#### Visualization:
+```{r}
+nypddata_by_month<-nypddata %>% 
+  mutate(Month=month.name[as.integer(month(OCCUR_DATE))])%>% 
+  group_by(Month) %>% 
+  summarise(count = n()) %>% 
+  rename('Number_of_Incidents'='count')
+
+ggplot(nypddata_by_month, aes(x = factor(Month, levels = month.name), y = Number_of_Incidents, fill = Month)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Number_of_Incidents), vjust = -0.5) +
+  labs(title = "Incidents by Month",x="Months")+
+  theme(axis.text.x = element_text(angle = 30, vjust = 0.5))
+```
+#### Analysis:
+Most of the incidents happens during July and August.
+February has the lowest number of incidents during the year.
+
+***
+## Modeling
+### Question: Is the yearly number of incidents trending up or down?
+#### Analysis:
+```{r}
+mod2<-lm(Number_of_Incidents~Year,data=nypddata_by_year)
+nypddata_by_year_w_pred<-nypddata_by_year %>% 
+  mutate(pred=predict(mod2))
+
+nypddata_by_year_w_pred %>% 
+  ggplot()+
+  geom_point(aes(x=Year,y=Number_of_Incidents),color="darkgreen")+
+  geom_point(aes(x=Year,y=pred),color="orange")
+  
+
+nypddata_by_year_w_pred %>% 
+  ggplot()+
+  geom_point(aes(x=Year, y=Number_of_Incidents, color = "Observed", shape = "Observed"), size = 3)+
+  geom_point(aes(x=Year, y=pred, color = "Predicted", shape = "Predicted"), size = 3) +
+  scale_color_manual(name = "Data Type", values = c("darkgreen", "orange"), labels = c("Observed", "Predicted")) +
+  scale_shape_manual(name = "Data Type", values = c(16, 17), labels = c("Observed", "Predicted"))
+
+ 
+```
+
+Although we see a spike since 2020, the prediction of the yearly number of incidents is still trending down base on the model.
+
+
+
+***
+## Conclusions and Bias Identification
+### Conclusions
+1. There is a trend of the going down since 2006 to 2018 and went up again since then. 
+2. From 2018 to 2021, the yearly number of cases keeps going up. By the end of 2021, the yearly number of incidents is almost back to the level of 2016
+3. The daily peak happens at 2020. The maximum number of incidents by date is 47, which happens on 2020-07-05. Within the 5 max incidences days, 2 of them is in July,2020.     
+4.The average number of incidents daily is nearly 5.    
+5.Most of the victims and perpetrator are male. There is a significant difference between the number of males and females got involved into the shooting incidents.   
+6.Most of the victims are from the age group of 25-44, while most of the perpetrators are from the age group of 18-24.    
+7.Most of the incidents happens during July and August.February has the lowest number of incidents during the year.   
+8.Although we see a spike since 2020, the prediction of the yearly number of incidents is still trending down base on the model.   
+
+### Bias Identification
+1. The data does not include the population of the new York city over time. With more people move into the city it may cause higher number of incidents. The trend of total number may not be the the trend of incidents rate.
+2. There are lots of missing data especially at earlier time. The ways the police department collected data during time can be different. This may cause less accuracy on data analysis.
+3. As for my analysis, it is hard make conclusion on people's gender, age and shooting incidents involvement. The simple comparison of numbers may lead to bias against different groups of people.
+
+
+
+rmarkdown::render_site()
+
+
